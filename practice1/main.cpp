@@ -11,6 +11,50 @@
 #include <stdexcept>
 #include <iostream>
 
+GLuint create_shader(GLenum kind, const std::string& source) {
+    auto id = glCreateShader(kind);
+    auto source_cstr = source.c_str();
+    glShaderSource(id, 1, &source_cstr, nullptr);
+    glCompileShader(id);
+
+    int success;
+    glGetShaderiv(id, GL_COMPILE_STATUS, &success);
+    if (!success) {
+        int infoLogLength;
+        glGetShaderiv(id, GL_INFO_LOG_LENGTH, &infoLogLength);
+
+        std::string infoLog;
+        infoLog.resize(infoLogLength);
+        glGetShaderInfoLog(id, infoLogLength, &infoLogLength, infoLog.data());
+
+        throw std::runtime_error{infoLog.data()};
+    }
+
+    return id;
+}
+
+GLuint create_program(GLuint vertex_shader, GLuint fragment_shader) {
+    auto id = glCreateProgram();
+    glAttachShader(id, vertex_shader);
+    glAttachShader(id, fragment_shader);
+    glLinkProgram(id);
+
+    int success;
+    glGetProgramiv(id, GL_LINK_STATUS, &success);
+    if (!success) {
+        int infoLogLength;
+        glGetProgramiv(id, GL_INFO_LOG_LENGTH, &infoLogLength);
+
+        std::string infoLog;
+        infoLog.resize(infoLogLength);
+        glGetProgramInfoLog(id, infoLogLength, &infoLogLength, infoLog.data());
+
+        throw std::runtime_error{infoLog.data()};
+    }
+
+    return id;
+}
+
 std::string to_string(std::string_view str)
 {
 	return std::string(str.begin(), str.end());
@@ -57,6 +101,45 @@ int main() try
 
 	glClearColor(0.8f, 0.8f, 1.f, 0.f);
 
+    GLuint vao;
+    glGenVertexArrays(1, &vao);
+
+    GLuint vs = create_shader(GL_VERTEX_SHADER, R"(
+#version 330 core
+
+const vec2 VERTICES[3] = vec2[3](
+    vec2(-0.5, -0.5),
+    vec2(0.0, 0.5),
+    vec2(0.5, -0.5)
+);
+
+const vec3 COLORS[3] = vec3[3](
+    vec3(1.0, 0.0, 0.0),
+    vec3(0.0, 1.0, 0.0),
+    vec3(0.0, 0.0, 1.0)
+);
+
+out vec3 color;
+
+void main() {
+    gl_Position = vec4(VERTICES[gl_VertexID], 0.0, 1.0);
+    color = COLORS[gl_VertexID];
+}
+)");
+
+    GLuint fs = create_shader(GL_FRAGMENT_SHADER, R"(
+#version 330 core
+
+in vec3 color;
+out vec4 out_color;
+
+void main() {
+    out_color = vec4(color, 1.0);
+}
+)");
+
+    GLuint program = create_program(vs, fs);
+
 	bool running = true;
 	while (running)
 	{
@@ -71,6 +154,10 @@ int main() try
 			break;
 
 		glClear(GL_COLOR_BUFFER_BIT);
+
+        glBindVertexArray(vao);
+        glUseProgram(program);
+        glDrawArrays(GL_TRIANGLES, 0, 3);
 
 		SDL_GL_SwapWindow(window);
 	}
