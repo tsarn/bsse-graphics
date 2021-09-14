@@ -12,6 +12,9 @@
 #include <iostream>
 #include <chrono>
 
+#include <glm/glm.hpp>
+#include <glm/ext.hpp>
+
 std::string to_string(std::string_view str)
 {
 	return std::string(str.begin(), str.end());
@@ -30,10 +33,19 @@ void glew_fail(std::string_view message, GLenum error)
 const char vertex_shader_source[] =
 R"(#version 330 core
 
+uniform mat4 transform;
+uniform mat4 view;
+
 const vec2 VERTICES[3] = vec2[3](
 	vec2(0.0, 0.0),
 	vec2(1.0, 0.0),
 	vec2(0.0, 1.0)
+);
+
+const vec3 COLORS[3] = vec3[3](
+    vec3(1.0, 0.0, 0.0),
+    vec3(0.0, 1.0, 0.0),
+    vec3(0.0, 0.0, 1.0)
 );
 
 out vec3 color;
@@ -41,8 +53,8 @@ out vec3 color;
 void main()
 {
 	vec2 position = VERTICES[gl_VertexID];
-	gl_Position = vec4(position, 0.0, 1.0);
-	color = vec3(position, 0.0);
+	gl_Position = view * transform * vec4(position, 0.0, 1.0);
+	color = COLORS[gl_VertexID];
 }
 )";
 
@@ -140,7 +152,13 @@ int main() try
 	GLuint vao;
 	glGenVertexArrays(1, &vao);
 
+    GLint transformU = glGetUniformLocation(program, "transform");
+    GLint viewU = glGetUniformLocation(program, "view");
+
+    glm::mat4 view{1.0f};
+
 	auto last_frame_start = std::chrono::high_resolution_clock::now();
+    float time = .0f;
 
 	bool running = true;
 	while (running)
@@ -156,6 +174,8 @@ int main() try
 				width = event.window.data1;
 				height = event.window.data2;
 				glViewport(0, 0, width, height);
+                float aspect = (float)width / (float)height;
+                view = glm::ortho(-aspect, aspect, -1.f, 1.f);
 				break;
 			}
 			break;
@@ -167,11 +187,18 @@ int main() try
 		auto now = std::chrono::high_resolution_clock::now();
 		float dt = std::chrono::duration_cast<std::chrono::duration<float>>(now - last_frame_start).count();
 		last_frame_start = now;
+        time += dt * 2;
 
 		glClear(GL_COLOR_BUFFER_BIT);
 
 		glUseProgram(program);
 		glBindVertexArray(vao);
+        glm::mat4 transform{1.0f};
+        transform = glm::scale(transform, glm::vec3{0.3f});
+        transform = glm::translate(transform, glm::vec3{sinf(time), cosf(time), 0.0f});
+        transform = glm::rotate(transform, time, glm::vec3{.0f, .0f, 1.f});
+        glUniformMatrix4fv(transformU, 1, GL_FALSE, glm::value_ptr(transform));
+        glUniformMatrix4fv(viewU, 1, GL_FALSE, glm::value_ptr(view));
 		glDrawArrays(GL_TRIANGLES, 0, 3);
 
 		SDL_GL_SwapWindow(window);
