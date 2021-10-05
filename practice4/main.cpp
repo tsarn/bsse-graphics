@@ -13,6 +13,7 @@
 #include <chrono>
 #include <vector>
 #include <map>
+#include <cstddef>
 
 std::string to_string(std::string_view str)
 {
@@ -215,6 +216,31 @@ int main() try
 
 	std::map<SDL_Keycode, bool> button_down;
 
+    GLuint vao;
+    glGenVertexArrays(1, &vao);
+    glBindVertexArray(vao);
+
+    GLuint vbo;
+    glGenBuffers(1, &vbo);
+    glBindBuffer(GL_ARRAY_BUFFER, vbo);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(cube_vertices), cube_vertices, GL_STATIC_DRAW);
+
+    GLuint ebo;
+    glGenBuffers(1, &ebo);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(cube_indices), cube_indices, GL_STATIC_DRAW);
+
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, false, sizeof(vertex), (void*)offsetof(vertex, position));
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 4, GL_UNSIGNED_BYTE, true, sizeof(vertex), (void*)offsetof(vertex, color));
+
+    glEnable(GL_DEPTH_TEST);
+    glEnable(GL_CULL_FACE);
+
+    float cube_x = 0.0f;
+    float cube_y = 0.0f;
+
 	bool running = true;
 	while (running)
 	{
@@ -248,27 +274,108 @@ int main() try
 		last_frame_start = now;
 		time += dt;
 
+        float speed = 3.0f;
+
+        if (button_down[SDLK_LEFT]) {
+            cube_x -= speed * dt;
+        }
+
+        if (button_down[SDLK_RIGHT]) {
+            cube_x += speed * dt;
+        }
+
+        if (button_down[SDLK_UP]) {
+            cube_y += speed * dt;
+        }
+
+        if (button_down[SDLK_DOWN]) {
+            cube_y -= speed * dt;
+        }
+
 		glClear(GL_COLOR_BUFFER_BIT);
+		glClear(GL_DEPTH_BUFFER_BIT);
 
-		float view[16] =
-		{
-			1.f, 0.f, 0.f, 0.f,
-			0.f, 1.f, 0.f, 0.f,
-			0.f, 0.f, 1.f, 0.f,
-			0.f, 0.f, 0.f, 1.f,
-		};
-
-		float transform[16] =
-		{
-			1.f, 0.f, 0.f, 0.f,
-			0.f, 1.f, 0.f, 0.f,
-			0.f, 0.f, 1.f, 0.f,
-			0.f, 0.f, 0.f, 1.f,
-		};
+        float near = 0.01f;
+        float far = 1000.0f;
+        float fov = M_PI / 4;
+        float aspect = 1.0f * width / height;
+        float right = tan(fov) * near;
+        float top = right / aspect;
 
 		glUseProgram(program);
-		glUniformMatrix4fv(view_location, 1, GL_TRUE, view);
-		glUniformMatrix4fv(transform_location, 1, GL_TRUE, transform);
+        glBindVertexArray(vao);
+        
+        {
+            float angle = time;
+            float scale = .5f;
+            float view[16] =
+            {
+                near / right, 0.f, 0.f, 0.f,
+                0.f, near / top, 0.f, 0.f,
+                0.f, 0.f, -(far + near) / (far - near), -2.f * far * near / (far - near),
+                0.f, 0.f, -1.f, 1.f,
+            };
+
+            float transform[16] =
+            {
+                cos(angle) * scale, 0.f, sin(angle) * scale, cube_x - .7f,
+                0.f, scale, 0.f, cube_y + .9f,
+                -sin(angle) * scale, 0.f, cos(angle) * scale, -4.f,
+                0.f, 0.f, 0.f, 1.f,
+            };
+
+            glUniformMatrix4fv(view_location, 1, GL_TRUE, view);
+            glUniformMatrix4fv(transform_location, 1, GL_TRUE, transform);
+            glDrawElements(GL_TRIANGLES, 36, GL_UNSIGNED_INT, nullptr);
+        }
+
+        {
+            float angle = time * 2.0f;
+            float scale = .2f;
+            float view[16] =
+            {
+                near / right, 0.f, 0.f, 0.f,
+                0.f, near / top, 0.f, 0.f,
+                0.f, 0.f, -(far + near) / (far - near), -2.f * far * near / (far - near),
+                0.f, 0.f, -1.f, 1.f,
+            };
+
+            float transform[16] =
+            {
+                scale, 0., 0.f, cube_x + .6f,
+                0.f, cos(angle) * scale, sin(angle) * scale, cube_y - .8f,
+                0.f, -sin(angle) * scale, cos(angle) * scale, -5.f,
+                0.f, 0.f, 0.f, 1.f,
+            };
+
+            glUniformMatrix4fv(view_location, 1, GL_TRUE, view);
+            glUniformMatrix4fv(transform_location, 1, GL_TRUE, transform);
+            glDrawElements(GL_TRIANGLES, 36, GL_UNSIGNED_INT, nullptr);
+        }
+
+        {
+            float angle = time * -1.5f;
+            float scale = .3f;
+            float view[16] =
+            {
+                near / right, 0.f, 0.f, 0.f,
+                0.f, near / top, 0.f, 0.f,
+                0.f, 0.f, -(far + near) / (far - near), -2.f * far * near / (far - near),
+                0.f, 0.f, -1.f, 1.f,
+            };
+
+            float transform[16] =
+            {
+                cos(angle) * scale, sin(angle) * scale, 0.f, cube_x,
+                -sin(angle) * scale, cos(angle) * scale, 0.f, cube_y,
+                0.f, 0.f, scale, -3.f,
+                0.f, 0.f, 0.f, 1.f,
+            };
+
+            glUniformMatrix4fv(view_location, 1, GL_TRUE, view);
+            glUniformMatrix4fv(transform_location, 1, GL_TRUE, transform);
+            glDrawElements(GL_TRIANGLES, 36, GL_UNSIGNED_INT, nullptr);
+        }
 
 		SDL_GL_SwapWindow(window);
 	}
