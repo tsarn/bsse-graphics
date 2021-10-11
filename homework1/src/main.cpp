@@ -1,18 +1,18 @@
-#include <iostream>
-#include <stdexcept>
-#include <vector>
 #include <array>
+#include <iostream>
 #include <memory>
+#include <stdexcept>
 #include <unordered_map>
+#include <vector>
 
 #include "gl_objects.h"
 #include "shaders.h"
 
 #include <GLFW/glfw3.h>
-#include <glm/glm.hpp>
 #include <glm/ext.hpp>
+#include <glm/glm.hpp>
 
-static GLFWwindow* window;
+static GLFWwindow *window;
 
 struct GraphData {
     std::vector<glm::vec2> coords;
@@ -20,11 +20,7 @@ struct GraphData {
     std::vector<int> indices;
 };
 
-GraphData generateGraph(
-    float xmin, float xmax,
-    float ymin, float ymax,
-    float step
-) {
+GraphData generateGraph(float xmin, float xmax, float ymin, float ymax, float step) {
     GraphData result;
     int n = (int)((xmax - xmin) / step);
     int m = (int)((ymax - ymin) / step);
@@ -41,12 +37,8 @@ GraphData generateGraph(
 
     for (int i = 0; i < n - 1; ++i) {
         for (int j = 0; j < m - 1; ++j) {
-            std::array<int, 4> idx = {
-                i * m + j,
-                (i + 1) * m + j,
-                (i + 1) * m + j + 1,
-                i * m + j + 1
-            };
+            std::array<int, 4> idx = {i * m + j, (i + 1) * m + j, (i + 1) * m + j + 1,
+                i * m + j + 1};
 
             result.indices.push_back(idx[0]);
             result.indices.push_back(idx[1]);
@@ -60,7 +52,7 @@ GraphData generateGraph(
     return result;
 }
 
-void updateGraph(GraphData& graph) {
+void updateGraph(GraphData &graph) {
     float t = glfwGetTime();
     for (int i = 0; i < graph.coords.size(); ++i) {
         float x = graph.coords[i].x;
@@ -75,13 +67,14 @@ struct IsolinesData {
     std::vector<int> indices;
 };
 
-void addIsoline(const GraphData& graph, IsolinesData& isolines, float value) {
+void addIsoline(const GraphData &graph, IsolinesData &isolines, float value) {
     float eps = 0.01;
 
     std::unordered_map<std::uint64_t, int> idxs;
 
     auto add = [&](glm::vec3 coords, unsigned idx0, unsigned idx1) {
-        if (idx0 > idx1) std::swap(idx0, idx1);
+        if (idx0 > idx1)
+            std::swap(idx0, idx1);
         std::uint64_t idx = idx0;
         idx <<= 32;
         idx |= idx1;
@@ -152,13 +145,14 @@ void initialize() {
 
     if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
         throw std::runtime_error{"gladLoadGLLoader failed"};
-    }    
+    }
 
     glViewport(0, 0, 800, 600);
 
-    glfwSetFramebufferSizeCallback(window, [](GLFWwindow* window, int width, int height) {
-        glViewport(0, 0, width, height);
-    });
+    glfwSetFramebufferSizeCallback(window,
+            [](GLFWwindow *window, int width, int height) {
+            glViewport(0, 0, width, height);
+            });
 }
 
 void loop() {
@@ -169,8 +163,12 @@ void loop() {
     Buffer coordsVBO, valuesVBO, graphEBO;
     Buffer isolinesVBO, isolinesEBO;
 
-    Program graphShader = createProgram(createShader(GL_VERTEX_SHADER, graphVS), createShader(GL_FRAGMENT_SHADER, graphFS));
-    Program isolinesShader = createProgram(createShader(GL_VERTEX_SHADER, isolinesVS), createShader(GL_FRAGMENT_SHADER, isolinesFS));
+    Program graphShader =
+        createProgram(createShader(GL_VERTEX_SHADER, graphVS),
+                createShader(GL_FRAGMENT_SHADER, graphFS));
+    Program isolinesShader =
+        createProgram(createShader(GL_VERTEX_SHADER, isolinesVS),
+                createShader(GL_FRAGMENT_SHADER, isolinesFS));
 
     auto Lview1 = glGetUniformLocation(graphShader, "view");
     auto Lprojection1 = glGetUniformLocation(graphShader, "projection");
@@ -195,18 +193,16 @@ void loop() {
     GraphData graph;
 
     auto regenerate = [&] {
-        graph = generateGraph(
-                xmin, xmax,
-                ymin, ymax,
-                step
-        );
+        graph = generateGraph(xmin, xmax, ymin, ymax, step);
 
         glBindVertexArray(graphVAO);
 
         glBindBuffer(GL_ARRAY_BUFFER, coordsVBO);
-        glBufferData(GL_ARRAY_BUFFER, graph.coords.size() * sizeof(glm::vec2), graph.coords.data(), GL_STATIC_DRAW);
+        glBufferData(GL_ARRAY_BUFFER, graph.coords.size() * sizeof(glm::vec2),
+                graph.coords.data(), GL_STATIC_DRAW);
 
-        glBufferData(GL_ELEMENT_ARRAY_BUFFER, graph.indices.size() * sizeof(int), graph.indices.data(), GL_STATIC_DRAW);
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, graph.indices.size() * sizeof(int),
+                graph.indices.data(), GL_STATIC_DRAW);
 
         glBindVertexArray(0);
     };
@@ -214,24 +210,24 @@ void loop() {
     glBindVertexArray(graphVAO);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, graphEBO);
     glBindBuffer(GL_ARRAY_BUFFER, coordsVBO);
-	glEnableVertexAttribArray(0);
-	glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(glm::vec2), nullptr);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(glm::vec2), nullptr);
 
     glBindBuffer(GL_ARRAY_BUFFER, valuesVBO);
-	glEnableVertexAttribArray(1);
-	glVertexAttribPointer(1, 1, GL_FLOAT, GL_FALSE, sizeof(float), nullptr);
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 1, GL_FLOAT, GL_FALSE, sizeof(float), nullptr);
 
     glBindVertexArray(isolinesVAO);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, isolinesEBO);
     glBindBuffer(GL_ARRAY_BUFFER, isolinesVBO);
-	glEnableVertexAttribArray(0);
+    glEnableVertexAttribArray(0);
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(glm::vec3), nullptr);
 
     float lastTime = .0f;
 
     regenerate();
 
-    while(!glfwWindowShouldClose(window)) {
+    while (!glfwWindowShouldClose(window)) {
         glBindVertexArray(0);
         glfwGetWindowSize(window, &width, &height);
 
@@ -274,11 +270,11 @@ void loop() {
             zstep = glm::max(0.1f, zstep - dt);
         }
 
-
         // Update graph data
         updateGraph(graph);
         glBindBuffer(GL_ARRAY_BUFFER, valuesVBO);
-        glBufferData(GL_ARRAY_BUFFER, graph.values.size() * sizeof(float), graph.values.data(), GL_STREAM_DRAW);
+        glBufferData(GL_ARRAY_BUFFER, graph.values.size() * sizeof(float),
+                graph.values.data(), GL_STREAM_DRAW);
 
         // Update isolines data
         IsolinesData isolines;
@@ -287,13 +283,17 @@ void loop() {
         }
 
         glBindBuffer(GL_ARRAY_BUFFER, isolinesVBO);
-        glBufferData(GL_ARRAY_BUFFER, isolines.coords.size() * sizeof(glm::vec3), isolines.coords.data(), GL_STREAM_DRAW);
+        glBufferData(GL_ARRAY_BUFFER, isolines.coords.size() * sizeof(glm::vec3),
+                isolines.coords.data(), GL_STREAM_DRAW);
 
         glBindVertexArray(isolinesVAO);
-        glBufferData(GL_ELEMENT_ARRAY_BUFFER, isolines.indices.size() * sizeof(int), isolines.indices.data(), GL_STREAM_DRAW);
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, isolines.indices.size() * sizeof(int),
+                isolines.indices.data(), GL_STREAM_DRAW);
         glBindVertexArray(0);
 
-//        std::cerr << "gv=" << graph.coords.size() << " gi=" << graph.indices.size() << " lv=" << isolines.coords.size() << " li=" << isolines.indices.size() << "\n";
+        //        std::cerr << "gv=" << graph.coords.size() << " gi=" <<
+        //        graph.indices.size() << " lv=" << isolines.coords.size() << " li="
+        //        << isolines.indices.size() << "\n";
 
         // Set camera
         glm::vec3 cameraPosition;
@@ -301,8 +301,10 @@ void loop() {
         cameraPosition.x = cos(cameraAngle) * cameraDist;
         cameraPosition.z = sin(cameraAngle) * cameraDist;
 
-        glm::mat4 view = glm::lookAt(cameraPosition, glm::vec3{0.0f}, glm::vec3{0.0f, 1.0f, 0.0f});
-        glm::mat4 projection = glm::perspective(fov, 1.0f * width / height, 0.1f, 100.0f);
+        glm::mat4 view = glm::lookAt(cameraPosition, glm::vec3{0.0f},
+                glm::vec3{0.0f, 1.0f, 0.0f});
+        glm::mat4 projection =
+            glm::perspective(fov, 1.0f * width / height, 0.1f, 100.0f);
 
         // Clear
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -313,7 +315,8 @@ void loop() {
         glUseProgram(graphShader);
         glUniformMatrix4fv(Lview1, 1, GL_FALSE, glm::value_ptr(view));
         glUniformMatrix4fv(Lprojection1, 1, GL_FALSE, glm::value_ptr(projection));
-        glDrawElements(GL_TRIANGLES, graph.indices.size(), GL_UNSIGNED_INT, nullptr);
+        glDrawElements(GL_TRIANGLES, graph.indices.size(), GL_UNSIGNED_INT,
+                nullptr);
 
         // Draw isolines
 
@@ -325,7 +328,7 @@ void loop() {
 
         // Swap
 
-        glfwPollEvents();    
+        glfwPollEvents();
         glfwSwapBuffers(window);
     }
 }
