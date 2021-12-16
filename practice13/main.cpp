@@ -15,6 +15,7 @@
 #include <chrono>
 #include <vector>
 #include <map>
+#include <unordered_set>
 
 #include <glm/glm.hpp>
 #include <glm/ext.hpp>
@@ -244,7 +245,9 @@ int main() try
     };
 
     auto measureTimes = [&] {
-        for (auto& query : usedQueries) {
+        std::unordered_set<GLuint> toRemove;
+        for (size_t i = 0; i < usedQueries.size(); ++i) {
+            auto query = usedQueries[i];
             GLint available = 0;
             glGetQueryObjectiv(query, GL_QUERY_RESULT_AVAILABLE, &available);
             if (available) {
@@ -253,13 +256,18 @@ int main() try
                 float seconds = us * 1e-9f;
 
                 frameTimes.push_back(seconds);
-
                 freeQueries.push_back(query);
-                std::swap(query, usedQueries.back());
-                usedQueries.pop_back();
-                break;
+                toRemove.insert(query);
             }
         }
+        usedQueries.erase(
+            std::remove_if(
+                usedQueries.begin(), usedQueries.end(), [&](auto query) {
+                    return toRemove.contains(query);
+                }
+            ),
+            usedQueries.end()
+        );
     };
 
 	bool running = true;
