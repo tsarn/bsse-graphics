@@ -16,12 +16,8 @@
 #include <vector>
 #include <map>
 
-#include <glm/vec3.hpp>
-#include <glm/vec4.hpp>
-#include <glm/mat4x4.hpp>
-#include <glm/ext/matrix_transform.hpp>
-#include <glm/ext/scalar_constants.hpp>
-#include <glm/gtx/string_cast.hpp>
+#include <glm/glm.hpp>
+#include <glm/ext.hpp>
 
 #include "aabb.hpp"
 #include "frustum.hpp"
@@ -52,13 +48,14 @@ uniform vec3 offset;
 
 layout (location = 0) in vec3 in_position;
 layout (location = 1) in vec3 in_normal;
+layout (location = 2) in vec3 in_offset;
 
 out vec3 normal;
 
 void main()
 {
 	normal = in_normal;
-	gl_Position = projection * view * vec4(in_position + offset, 1.0);
+	gl_Position = projection * view * vec4(in_position + in_offset + offset, 1.0);
 }
 )";
 
@@ -166,13 +163,38 @@ int main() try
 
 	std::vector<vertex> vertices;
 	std::vector<std::uint32_t> indices;
+    std::vector<std::size_t> lod_sizes, lod_offsets;
+    int lod_count = 6;
 	{
-		std::ifstream in(PRACTICE_SOURCE_DIRECTORY "/bunny0.obj");
-		std::tie(vertices, indices) = load_obj(in, 4.f);
+        for (int i = 0; i < lod_count; ++i) {
+            std::stringstream path;
+            path << PRACTICE_SOURCE_DIRECTORY;
+            path << "/bunny" << i << ".obj";
+            std::ifstream in{path.str()};
+            auto [obj_vertices, obj_indices] = load_obj(in, 4.f);
+            for (auto idx : obj_indices) {
+                indices.push_back(idx + vertices.size());
+            }
+            vertices.insert(vertices.end(), obj_vertices.begin(), obj_vertices.end());
+            if (i == 0) {
+                lod_offsets.push_back(0);
+            } else {
+                lod_offsets.push_back(lod_offsets.back() + lod_sizes.back());
+            }
+            lod_sizes.push_back(obj_indices.size());
+        }
 	}
+    auto model_bbox = bbox(vertices);
 	fill_normals(vertices, indices);
 
-	GLuint vao, vbo, ebo;
+    std::vector<glm::vec3> offsets;
+    for (int x = -16; x < 16; ++x) {
+        for (int z = -16; z < 16; ++z) {
+            offsets.emplace_back(x, 0, z);
+        }
+    }
+
+	GLuint vao, vbo, ebo, offsets_vbo;
 	glGenVertexArrays(1, &vao);
 	glBindVertexArray(vao);
 
@@ -189,6 +211,14 @@ int main() try
 	glEnableVertexAttribArray(1);
 	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(vertex), (void*)(12));
 
+	glGenBuffers(1, &offsets_vbo);
+	glBindBuffer(GL_ARRAY_BUFFER, offsets_vbo);
+	glBufferData(GL_ARRAY_BUFFER, offsets.size() * sizeof(offsets[0]), offsets.data(), GL_STATIC_DRAW);
+
+	//glEnableVertexAttribArray(2);
+	//glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), nullptr);
+    //glVertexAttribDivisor(2, 1);
+
 	auto last_frame_start = std::chrono::high_resolution_clock::now();
 
 	float time = 0.f;
@@ -198,6 +228,40 @@ int main() try
 	float camera_rotation = 0.f;
 
 	std::map<SDL_Keycode, bool> button_down;
+    std::vector<GLuint> usedQueries, freeQueries;
+    std::vector<float> frameTimes;
+
+    auto getQuery = [&] {
+        GLuint id;
+        if (freeQueries.empty()) {
+            glGenQueries(1, &id);
+        } else {
+            id = freeQueries.back();
+            freeQueries.pop_back();
+        }
+        usedQueries.push_back(id);
+        return id;
+    };
+
+    auto measureTimes = [&] {
+        for (auto& query : usedQueries) {
+            GLint available = 0;
+            glGetQueryObjectiv(query, GL_QUERY_RESULT_AVAILABLE, &available);
+            if (available) {
+                freeQueries.push_back(query);
+                std::swap(query, usedQueries.back());
+                usedQueries.pop_back();
+
+                GLuint64 us;
+                glGetQueryObjectui64v(query, GL_QUERY_RESULT, &us);
+                float seconds = us * 1e-9f;
+
+                frameTimes.push_back(seconds);
+
+                break;
+            }
+        }
+    };
 
 	bool running = true;
 	bool paused = false;
@@ -262,6 +326,8 @@ int main() try
 		if (button_down[SDLK_UP])
 			camera_position.y += 3.f * dt;
 
+        glBeginQuery(GL_TIME_ELAPSED, getQuery());
+
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 		glEnable(GL_DEPTH_TEST);
 		glEnable(GL_CULL_FACE);
@@ -283,11 +349,42 @@ int main() try
 		glUniformMatrix4fv(projection_location, 1, GL_FALSE, reinterpret_cast<float *>(&projection));
 		glUniform3fv(light_dir_location, 1, reinterpret_cast<float *>(&light_dir));
 
+        frustum fr{projection * view};
+
 		glBindVertexArray(vao);
-		glDrawElements(GL_TRIANGLES, indices.size(), GL_UNSIGNED_INT, nullptr);
+
+//        glDrawElementsInstanced(GL_TRIANGLES, indices.size(), GL_UNSIGNED_INT, nullptr, offsets.size());
+        int drawnCount = 0;
+        for (const auto& offset : offsets) {
+            if (intersect(fr, aabb{model_bbox.first + offset, model_bbox.second + offset})) {
+                int lod = (int)(glm::length(offset - camera_position) / 3);
+                if (lod < 0) lod = 0;
+                if (lod >= lod_count) lod = lod_count - 1;
+                ++drawnCount;
+                glUniform3fv(offset_location, 1, glm::value_ptr(offset));
+                glDrawElements(GL_TRIANGLES, lod_sizes[lod], GL_UNSIGNED_INT, (void*)(lod_offsets[lod] * sizeof(std::uint32_t)));
+            }
+        }
+//        std::cerr << "drawing " << drawnCount << " objects\n";
+
+        glEndQuery(GL_TIME_ELAPSED);
+        measureTimes();
 
 		SDL_GL_SwapWindow(window);
 	}
+
+    std::sort(frameTimes.begin(), frameTimes.end());
+    auto frameTimeQuant = [&](float q) {
+        if (frameTimes.empty()) {
+            return 0.f;
+        }
+        return frameTimes[(size_t)(q * frameTimes.size())];
+    };
+    std::cerr << "allocated " << freeQueries.size() + usedQueries.size() << " query objects\n";
+    std::cerr << "collected " << frameTimes.size() << " frame times\n";
+    std::cerr << "  avg: " << frameTimeQuant(0.50f) << " seconds \n";
+    std::cerr << "  p90: " << frameTimeQuant(0.90f) << " seconds \n";
+    std::cerr << "  p99: " << frameTimeQuant(0.99f) << " seconds \n";
 
 	SDL_GL_DeleteContext(gl_context);
 	SDL_DestroyWindow(window);
