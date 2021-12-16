@@ -248,16 +248,15 @@ int main() try
             GLint available = 0;
             glGetQueryObjectiv(query, GL_QUERY_RESULT_AVAILABLE, &available);
             if (available) {
-                freeQueries.push_back(query);
-                std::swap(query, usedQueries.back());
-                usedQueries.pop_back();
-
                 GLuint64 us;
                 glGetQueryObjectui64v(query, GL_QUERY_RESULT, &us);
                 float seconds = us * 1e-9f;
 
                 frameTimes.push_back(seconds);
 
+                freeQueries.push_back(query);
+                std::swap(query, usedQueries.back());
+                usedQueries.pop_back();
                 break;
             }
         }
@@ -382,7 +381,7 @@ int main() try
     };
     std::cerr << "allocated " << freeQueries.size() + usedQueries.size() << " query objects\n";
     std::cerr << "collected " << frameTimes.size() << " frame times\n";
-    std::cerr << "  avg: " << frameTimeQuant(0.50f) << " seconds \n";
+    std::cerr << "  p50: " << frameTimeQuant(0.50f) << " seconds \n";
     std::cerr << "  p90: " << frameTimeQuant(0.90f) << " seconds \n";
     std::cerr << "  p99: " << frameTimeQuant(0.99f) << " seconds \n";
 
